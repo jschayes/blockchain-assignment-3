@@ -11,7 +11,7 @@ from web3.providers.rpc import HTTPProvider
 # infura_url = f"https://mainnet.infura.io/v3/{infura_token}"
 
 def connect_to_eth():
-    url = "https://mainnet.infura.io/v3/YOUR_INFURA_PROJECT_ID"
+    url = "https://mainnet.infura.io/v3/d5fec1bb98da4a07a6495e2cb7d03b2d"
     w3 = Web3(HTTPProvider(url))
     assert w3.is_connected(), f"Failed to connect to provider at {url}"
     return w3
@@ -48,14 +48,28 @@ def is_ordered_block(w3, block_num):
 
     Conveniently, most type 2 transactions set the gasPrice field to be min( tx.maxPriorityFeePerGas + block.baseFeePerGas, tx.maxFeePerGas )
     """
+     w3 = connect_to_eth()
     block = w3.eth.get_block(block_num, full_transactions=True)
-    ordered = True
-
     base_fee = block.get("baseFeePerGas", 0)
     txs = block["transactions"]
 
     if len(txs) <= 1:
         return True
+
+    def priority_fee(tx):
+        if tx.get("maxPriorityFeePerGas") is not None:
+            return min(tx["maxPriorityFeePerGas"], tx["maxFeePerGas"] - base_fee)
+        return tx["gasPrice"] - base_fee
+
+    prev_fee = priority_fee(txs[0])
+
+    for tx in txs[1:]:
+        curr_fee = priority_fee(tx)
+        if prev_fee < curr_fee:
+            return False
+        prev_fee = curr_fee
+
+    return True
 
     def priority_fee(tx):
         # Type 2 / EIP-1559 style transaction
@@ -124,7 +138,7 @@ if __name__ == "__main__":
     n = 5
     for _ in range(n):
         block_num = random.randint(1, latest_block)
-        ordered = is_ordered_block(eth_w3, block_num)
+        ordered = is_ordered_block(block_num)
         if ordered:
             print(f"Block {block_num} is ordered")
         else:
